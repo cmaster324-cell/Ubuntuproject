@@ -1,0 +1,62 @@
+name: Rom Builder
+on: 
+  workflow_dispatch:
+defaults:
+  run:
+    shell: bash
+
+jobs:
+
+  build:
+    name: Deploy..
+    runs-on: ubuntu-latest
+    steps:
+    - name: checkout
+      uses: actions/checkout@v1
+
+    - name: Environment
+      uses: fifsky/ssh-action@master
+      with:
+        script: |
+          cat /etc/os*
+          echo CPU: $(nproc --all)
+
+    - name: check free space
+      uses: fifsky/ssh-action@master
+      with:
+        script: |
+          df -h
+
+    - name: check member active
+      uses: fifsky/ssh-action@master
+      with:
+        script: |
+          w
+
+    - name: sync rom..
+      uses: fifsky/ssh-action@master
+      with:
+        script: |
+          rm -rf .repo/local_manifests
+          repo init --depth=1 --no-repo-verify -u https://github.com/LineageOS/android.git -b lineage-19.1 -g default,-mips,-darwin,-notdefault
+          git clone https://github.com/ariffjenong/local_manifest.git --depth=1 -b LOS19 .repo/local_manifests
+          repo sync -c --no-clone-bundle --no-tags --optimized-fetch --prune --force-sync -j8
+
+    - name: Building Rom..
+      uses: fifsky/ssh-action@master
+      with:
+        script: |
+          export CCACHE_EXEC=/usr/bin/ccache
+          export USE_CCACHE=1
+          ccache -o compression=true
+          ccache -o compression_level=1
+          ccache -o limit_multiple=1
+          ccache -o max_size=150G
+          ccache -z
+          source build/envsetup.sh
+          lunch aosp_maple_dsds-userdebug
+          export TZ=Asia/Jakarta
+          export BUILD_USERNAME=ArifJeNong
+          export BUILD_HOSTNAME=ArifJeNong
+          export USE_REMOVE_PACKAGES=false
+          make bacon -j8
